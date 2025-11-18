@@ -70,6 +70,8 @@ custom_css = """
         box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
     }
     
+
+    
     .dancing-script {
         font-size: 60px;
         font-family: 'Dancing Script', cursive !important;
@@ -182,8 +184,7 @@ st.markdown(custom_css, unsafe_allow_html=True)
 
 # Header section
 try:
-    # FIXED: Changed saul.png to saul.jpg to match your uploaded file
-    image_path = "saul.jpg"
+    image_path = "saul.png"
     if os.path.exists(image_path):
         with open(image_path, "rb") as f:
             image_data = f.read()
@@ -203,17 +204,7 @@ try:
             </div>
         """, unsafe_allow_html=True)
 except Exception as e:
-    # Fallback just in case
-    st.markdown(f"""
-            <div class="header-container">
-                <div class="header-text">
-                    <h1 style="color: white; font-size: 2.5rem;">
-                        <span class="dancing-script">Better Call Bot!</span>
-                    </h1>
-                    <p style="color: #e0e0e0; font-size: 1.2rem;">Did you know that you have rights? The Constitution says you do. And so do I.</p>
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
+    st.error(f"Unable to load image: {e}")
 
 # Add disclaimer before chat interface
 disclaimer_text = """
@@ -245,23 +236,17 @@ if "chat_history" not in st.session_state:
     st.session_state.chat_history = InMemoryChatMessageHistory()
 
 # Initialize embeddings and vector store
-try:
-    embeddings = HuggingFaceEmbeddings(
-        model_name="sentence-transformers/all-MiniLM-L6-v2",
-        model_kwargs={'device': 'cpu'},
-        encode_kwargs={'normalize_embeddings': True}
-    )
-    db = FAISS.load_local("vector_db", embeddings, allow_dangerous_deserialization=True)
-    # FIXED: Reduced k to 3 for stability
-    db_retriever = db.as_retriever(search_type="similarity", search_kwargs={"k": 3})
-except Exception as e:
-    st.error(f"Error loading vector DB: {e}")
-    st.stop()
+embeddings = HuggingFaceEmbeddings(
+    model_name="sentence-transformers/all-MiniLM-L6-v2",
+    model_kwargs={'device': 'cpu'},
+    encode_kwargs={'normalize_embeddings': True}
+)
+db = FAISS.load_local("vector_db", embeddings, allow_dangerous_deserialization=True)
+db_retriever = db.as_retriever(search_type="similarity", search_kwargs={"k": 4})
 
 # Define the prompt template
-# FIXED: Removed <s>[INST] tags which confuse the new Llama 3 model
 prompt_template = """
-You are a legal information chatbot with strict limitations. Follow these guidelines:
+<s>[INST]You are a legal information chatbot with strict limitations. Follow these guidelines:
 
 1. NEVER provide specific legal advice
 2. If the question seeks specific legal advice or involves complex legal matters, respond with a warning to seek professional legal counsel
@@ -278,13 +263,13 @@ CONTEXT: {context}
 CHAT HISTORY: {chat_history}
 QUESTION: {question}
 ANSWER:
+</s>[INST]
 """
 prompt = PromptTemplate(template=prompt_template, input_variables=['context', 'question', 'chat_history'])
 
 # Initialize the LLM
-# FIXED: Switched to STABLE model 'llama3-8b-8192' to stop 500 Errors
-llm = ChatGroq(groq_api_key=groq_api_key, model_name="llama3-8b-8192")
-    
+llm = ChatGroq(groq_api_key=groq_api_key, model_name="llama-3.1-70b-versatile")
+	
 # Helper function to format chat history
 def format_chat_history():
     history_text = ""
@@ -331,54 +316,49 @@ if input_prompt:
 
     with st.chat_message("assistant", avatar="⚖️"):
         with st.status("Analyzing your question...", expanded=True):
-            try:
-                # Retrieve relevant documents
-                docs = db_retriever.invoke(input_prompt)
-                
-                # Format context from documents
-                context = "\n\n".join([doc.page_content for doc in docs])
-                
-                # Format chat history
-                chat_history_text = format_chat_history()
-                
-                # Create the prompt
-                formatted_prompt = prompt.format(
-                    context=context,
-                    question=input_prompt,
-                    chat_history=chat_history_text
-                )
-                
-                # Get response from LLM
-                response = llm.invoke(formatted_prompt)
-                response_text = response.content
-                
-                # Check for risky content
-                if check_for_risky_content(response_text):
-                    st.markdown("""
-                        <div class="warning-message">
-                            ⚠️ This response may contain general guidance. Please consult with a qualified attorney for specific advice.
-                        </div>
-                    """, unsafe_allow_html=True)
+            # Retrieve relevant documents
+            docs = db_retriever.invoke(input_prompt)
             
-                # Display response with typing effect
-                message_placeholder = st.empty()
-                full_response = ""
-                for chunk in response_text:
-                    full_response += chunk
-                    time.sleep(0.02)
-                    message_placeholder.markdown(full_response + " ▌")
-                message_placeholder.markdown(full_response)
-
-                st.session_state.messages.append({"role": "assistant", "content": response_text})
-                st.session_state.chat_history.add_ai_message(response_text)
-
-            except Exception as e:
-                # Graceful error handling instead of crashing
-                st.error(f"Something went wrong: {e}")
-                st.write("Please try asking your question again.")
+            # Format context from documents
+            context = "\n\n".join([doc.page_content for doc in docs])
+            
+            # Format chat history
+            chat_history_text = format_chat_history()
+            
+            # Create the prompt
+            formatted_prompt = prompt.format(
+                context=context,
+                question=input_prompt,
+                chat_history=chat_history_text
+            )
+            
+            # Get response from LLM
+            response = llm.invoke(formatted_prompt)
+            response_text = response.content
+            
+            # Check for risky content
+            if check_for_risky_content(response_text):
+                st.markdown("""
+                    <div class="warning-message">
+                        ⚠️ This response may contain general guidance. Please consult with a qualified attorney for specific advice.
+                    </div>
+                """, unsafe_allow_html=True)
+        
+            
+            # Display response with typing effect
+            message_placeholder = st.empty()
+            full_response = ""
+            for chunk in response_text:
+                full_response += chunk
+                time.sleep(0.02)
+                message_placeholder.markdown(full_response + " ▌")
+            message_placeholder.markdown(full_response)
             
         col1, col2, col3 = st.columns([4, 1, 4])
         with col2:
             st.button('🗑️ Clear Chat', on_click=reset_conversation, key="clear_chat", help="Clear the conversation history", type="secondary", use_container_width=True)
+
+    st.session_state.messages.append({"role": "assistant", "content": response_text})
+    st.session_state.chat_history.add_ai_message(response_text)
 
 st.markdown('</div>', unsafe_allow_html=True)
