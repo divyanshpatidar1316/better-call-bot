@@ -2,6 +2,7 @@ import streamlit as st
 import os
 import time
 import base64
+from PIL import Image
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_core.prompts import PromptTemplate
@@ -14,7 +15,7 @@ from dotenv import load_dotenv
 load_dotenv()
 groq_api_key = os.getenv("GROQ_API_KEY")
 
-# Custom color scheme and styling (KEPT EXACTLY AS YOU WANTED)
+# Custom color scheme and styling
 custom_css = """
 <style>
     /* Import Google Fonts */
@@ -29,9 +30,18 @@ custom_css = """
         --chat-bg: var(--accent-color);
     }
     
-    /* Page styling */
-    .main { color: var(--text-color); }
-    .stApp { color: var(--text-color); }
+    /* Page styling - removing background color overrides */
+    .main {
+        color: var(--text-color);
+    .stApp {
+        color: var(--text-color);
+    }
+
+    }
+
+    .stApp {
+        color: var(--text-color);
+    }
     
     /* Header styling */
     .header-container {
@@ -46,8 +56,14 @@ custom_css = """
         justify-content: space-between;
     }
     
-    .header-text h1, .header-text p { color: var(--text-color) !important; }
-    .header-image { flex-shrink: 0; }
+    .header-text h1, .header-text p {
+        color: var(--text-color) !important;
+    }
+    
+    .header-image {
+        flex-shrink: 0;
+    }
+    
     .header-image img {
         max-width: 300px;
         border-radius: 10px;
@@ -60,7 +76,11 @@ custom_css = """
     }
     
     /* Chat container styling */
-    .chat-container { max-width: 800px; margin: 0 auto; padding: 20px; }
+    .chat-container {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+    }
     
     /* Message styling */
     .stChatMessage {
@@ -71,7 +91,11 @@ custom_css = """
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
         color: var(--text-color);
     }
-    .stChatMessage p { color: var(--text-color) !important; }
+    
+    /* Make message text white */
+    .stChatMessage p {
+        color: var(--text-color) !important;
+    }
     
     /* Input box styling */
     .stTextInput input {
@@ -91,6 +115,7 @@ custom_css = """
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         transition: all 0.3s ease;
     }
+    
     div.stButton > button:hover {
         background-color: var(--accent-color);
         transform: translateY(-2px);
@@ -107,6 +132,7 @@ custom_css = """
         box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05) !important;
         transition: all 0.2s ease !important;
     }
+    
     .clear-chat-button:hover {
         background-color: #e0e0e0 !important;
         border-color: #cccccc !important;
@@ -132,6 +158,7 @@ custom_css = """
         margin: 1rem 0;
         border-radius: 4px;
     }
+    
     .warning-message {
         background-color: #fff3cd;
         color: #856404;
@@ -155,8 +182,8 @@ st.markdown(custom_css, unsafe_allow_html=True)
 
 # Header section
 try:
-    # FIXED: Changed saul.png to saul.jpg (which is what you uploaded)
-    image_path = "saul.jpg" 
+    # FIXED: Changed saul.png to saul.jpg to match your uploaded file
+    image_path = "saul.jpg"
     if os.path.exists(image_path):
         with open(image_path, "rb") as f:
             image_data = f.read()
@@ -176,19 +203,19 @@ try:
             </div>
         """, unsafe_allow_html=True)
 except Exception as e:
-    # Silent fail or generic header if image missing
+    # Fallback just in case
     st.markdown(f"""
             <div class="header-container">
                 <div class="header-text">
                     <h1 style="color: white; font-size: 2.5rem;">
                         <span class="dancing-script">Better Call Bot!</span>
                     </h1>
-                    <p style="color: #e0e0e0; font-size: 1.2rem;">Your AI Legal Assistant.</p>
+                    <p style="color: #e0e0e0; font-size: 1.2rem;">Did you know that you have rights? The Constitution says you do. And so do I.</p>
                 </div>
             </div>
         """, unsafe_allow_html=True)
 
-# Add disclaimer
+# Add disclaimer before chat interface
 disclaimer_text = """
 <div class="legal-disclaimer" style="color:#ffffff;" >
     <h4>⚠️ Legal Information Disclaimer</h4>
@@ -202,6 +229,7 @@ disclaimer_text = """
     <p><strong>Please consult with a qualified attorney for specific legal advice.</strong></p>
 </div>
 """
+
 st.markdown(disclaimer_text, unsafe_allow_html=True)
 
 # Reset conversation function
@@ -217,7 +245,6 @@ if "chat_history" not in st.session_state:
     st.session_state.chat_history = InMemoryChatMessageHistory()
 
 # Initialize embeddings and vector store
-# ADDED ERROR HANDLING HERE
 try:
     embeddings = HuggingFaceEmbeddings(
         model_name="sentence-transformers/all-MiniLM-L6-v2",
@@ -225,14 +252,14 @@ try:
         encode_kwargs={'normalize_embeddings': True}
     )
     db = FAISS.load_local("vector_db", embeddings, allow_dangerous_deserialization=True)
-    # FIXED: Reduced k to 3 to prevent overloading the prompt (fixes Bad Request)
+    # FIXED: Reduced k to 3 for stability
     db_retriever = db.as_retriever(search_type="similarity", search_kwargs={"k": 3})
 except Exception as e:
-    st.error(f"Error loading vector database. Please run data_ingestion.py first. Error: {e}")
+    st.error(f"Error loading vector DB: {e}")
     st.stop()
 
 # Define the prompt template
-# FIXED: Removed <s>[INST] tags which cause issues with Llama 3
+# FIXED: Removed <s>[INST] tags which confuse the new Llama 3 model
 prompt_template = """
 You are a legal information chatbot with strict limitations. Follow these guidelines:
 
@@ -255,14 +282,14 @@ ANSWER:
 prompt = PromptTemplate(template=prompt_template, input_variables=['context', 'question', 'chat_history'])
 
 # Initialize the LLM
-# FIXED: Switched to the STABLE model to prevent Internal Server Error 500
+# FIXED: Switched to STABLE model 'llama3-8b-8192' to stop 500 Errors
 llm = ChatGroq(groq_api_key=groq_api_key, model_name="llama3-8b-8192")
     
 # Helper function to format chat history
 def format_chat_history():
     history_text = ""
     messages = st.session_state.chat_history.messages
-    for msg in messages[-4:]: 
+    for msg in messages[-4:]:  # Last 2 exchanges (4 messages)
         if isinstance(msg, HumanMessage):
             history_text += f"Human: {msg.content}\n"
         elif isinstance(msg, AIMessage):
@@ -272,9 +299,14 @@ def format_chat_history():
 # Chat interface
 st.markdown('<div class="chat-container">', unsafe_allow_html=True)
 
+# Display chat messages with improved styling
 for message in st.session_state.messages:
-    with st.chat_message(message.get("role"), avatar="👤" if message.get("role") == "user" else "⚖️"):
+    with st.chat_message(
+        message.get("role"),
+        avatar="👤" if message.get("role") == "user" else "⚖️"
+    ):
         content = message.get("content")
+        # Split content into main response and sources if sources exist
         if "Sources:" in content:
             main_content, sources = content.split("Sources:", 1)
             st.write(main_content)
@@ -282,10 +314,12 @@ for message in st.session_state.messages:
         else:
             st.write(content)
 
+# Function to check for risky content
 def check_for_risky_content(response):
     risky_keywords = ['you should', 'I advise', 'you must', 'definitely', 'always', 'never']
     return any(keyword in response.lower() for keyword in risky_keywords)
 
+# Chat input with custom styling
 input_prompt = st.chat_input("Ask your legal question...")
 
 if input_prompt:
@@ -326,7 +360,7 @@ if input_prompt:
                         </div>
                     """, unsafe_allow_html=True)
             
-                # Display response
+                # Display response with typing effect
                 message_placeholder = st.empty()
                 full_response = ""
                 for chunk in response_text:
@@ -334,14 +368,15 @@ if input_prompt:
                     time.sleep(0.02)
                     message_placeholder.markdown(full_response + " ▌")
                 message_placeholder.markdown(full_response)
-                
+
                 st.session_state.messages.append({"role": "assistant", "content": response_text})
                 st.session_state.chat_history.add_ai_message(response_text)
-            
-            except Exception as e:
-                st.error(f"An error occurred: {str(e)}")
-                st.write("I apologize, but I couldn't process that request. Please try asking again.")
 
+            except Exception as e:
+                # Graceful error handling instead of crashing
+                st.error(f"Something went wrong: {e}")
+                st.write("Please try asking your question again.")
+            
         col1, col2, col3 = st.columns([4, 1, 4])
         with col2:
             st.button('🗑️ Clear Chat', on_click=reset_conversation, key="clear_chat", help="Clear the conversation history", type="secondary", use_container_width=True)
