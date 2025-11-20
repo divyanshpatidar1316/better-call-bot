@@ -268,7 +268,7 @@ ANSWER:
 prompt = PromptTemplate(template=prompt_template, input_variables=['context', 'question', 'chat_history'])
 
 # Initialize the LLM
-llm = ChatGroq(groq_api_key=groq_api_key, model_name="llama-3.3-70b-versatile")
+llm = ChatGroq(groq_api_key=groq_api_key, model_name="llama-3.1-70b-versatile")
 	
 # Helper function to format chat history
 def format_chat_history():
@@ -362,4 +362,5 @@ if input_prompt:
     st.session_state.chat_history.add_ai_message(response_text)
 
 st.markdown('</div>', unsafe_allow_html=True)
+
 
