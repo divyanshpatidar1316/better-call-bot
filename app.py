@@ -362,7 +362,3 @@ if input_prompt:
     st.session_state.chat_history.add_ai_message(response_text)
 
 st.markdown('</div>', unsafe_allow_html=True)
-
-
-
-
